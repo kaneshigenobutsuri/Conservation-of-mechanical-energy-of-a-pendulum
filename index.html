@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>振り子における力学的エネルギー保存</title>
+    <style>
+        body { font-family: "Helvetica Neue", Arial, sans-serif; background-color: #f4f4f9; color: #333; display: flex; flex-direction: column; align-items: center; margin: 0; padding: 20px; }
+        h1 { font-size: 1.5rem; margin-bottom: 20px; }
+        
+        .main-container { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 20px; 
+            justify-content: center; 
+            max-width: 900px; 
+            width: 100%; 
+            align-items: stretch; 
+        }
+        
+        .box-style {
+            background: #fff; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+            height: 520px; 
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .canvas-area { 
+            width: 420px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
+            overflow: hidden;
+        }
+        .sim-area { cursor: grab; }
+        .sim-area:active { cursor: grabbing; }
+
+        .controls-area { 
+            flex: 1; 
+            min-width: 340px; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between; 
+        }
+        
+        .buttons-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        button { flex: 1; background: #333; color: #fff; border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-size: 1rem; transition: background 0.2s;}
+        button:hover { background: #555; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        button.active { background: #4ecdc4; font-weight: bold; color: #fff; }
+
+        .control-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem;}
+        input[type=range] { width: 100%; cursor: pointer; margin-bottom: 0;}
+        
+        .sub-control { margin-left: 20px; margin-top: 5px; font-size: 0.85rem; color: #555; }
+        .disabled-control { opacity: 0.5; pointer-events: none; }
+
+        .realtime-stats {
+            display: flex; justify-content: space-around; background: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #e9ecef; margin-bottom: 5px;
+        }
+        .stat-item { text-align: center; width: 45%; }
+        .stat-label { display: block; font-size: 0.75rem; color: #666; margin-bottom: 2px; }
+        .stat-value { font-family: monospace; font-size: 1.2rem; font-weight: bold; color: #333; }
+        .unit { font-size: 0.75rem; color: #888; }
+
+        .energy-section { padding-top: 10px; border-top: 1px solid #eee; margin-bottom: 10px;}
+        .energy-row { display: flex; align-items: center; margin-bottom: 8px; font-size: 0.9rem; }
+        .e-label { width: 80px; font-weight: bold; color: #555; }
+        .bar-track { flex-grow: 1; height: 18px; background: #eee; border-radius: 4px; overflow: hidden; margin: 0 10px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); position: relative;}
+        .bar-fill { height: 100%; width: 0%; transition: width 0.05s linear; } 
+        .e-val { width: 50px; text-align: right; font-family: monospace; font-weight: bold; }
+
+        .fill-k { background-color: #ff6b6b; } 
+        .fill-u { background-color: #4ecdc4; } 
+        .fill-e { background-color: #ffe66d; } 
+
+        .top-hint-msg {
+            position: absolute; 
+            top: 15px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            background: rgba(50, 50, 50, 0.8); 
+            padding: 8px 20px; 
+            border-radius: 20px;
+            font-weight: bold; 
+            color: #fff; 
+            pointer-events: none;
+            display: none; 
+            z-index: 10; 
+            white-space: nowrap;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>振り子における力学的エネルギー保存</h1>
+
+    <div class="main-container">
+        <div class="canvas-area sim-area box-style">
+            <canvas id="simCanvas" width="400" height="400" style="width:400px; height:400px;"></canvas>
+            <div id="dragHint" class="top-hint-msg">おもりをドラッグしてスタート</div>
+            <div id="errorMsg" style="position:absolute; bottom:10px; left:10px; color:red; font-size:12px; display:none;"></div>
+        </div>
+
+        <div class="controls-area box-style">
+            <div>
+                <div class="buttons-row">
+                    <button id="pauseBtn">一時停止</button>
+                    <button id="resetBtn">リセット</button>
+                </div>
+                
+                <div style="background: #f0f0f0; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                    <button id="resistanceBtn" style="width:100%; margin-bottom:5px;">空気抵抗: OFF</button>
+                    <div id="resistanceControl" class="sub-control disabled-control">
+                        <label>抵抗の大きさ: <span id="resVal">小</span></label>
+                        <input type="range" id="resRange" min="1" max="50" step="1" value="10">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>質量 m: <span id="massVal">1.0</span> kg</label>
+                    <input type="range" id="massRange" min="0.1" max="5.0" step="0.1" value="1.0">
+                </div>
+                <div class="control-group" style="margin-top:10px;">
+                    <label>糸の長さ L: <span id="lengthVal">1.0</span> m</label>
+                    <input type="range" id="lengthRange" min="0.5" max="2.0" step="0.1" value="1.0">
+                </div>
+            </div>
+
+            <div style="margin-top: auto;">
+                <div class="energy-section">
+                    <div class="energy-row">
+                        <span class="e-label">運動 K</span>
+                        <div class="bar-track"><div id="barK" class="bar-fill fill-k"></div></div>
+                        <span id="valK" class="e-val">0.0</span>
+                    </div>
+                    <div class="energy-row">
+                        <span class="e-label">位置 U</span>
+                        <div class="bar-track"><div id="barU" class="bar-fill fill-u"></div></div>
+                        <span id="valU" class="e-val">0.0</span>
+                    </div>
+                    <div class="energy-row">
+                        <span class="e-label">力学的 E</span>
+                        <div class="bar-track"><div id="barE" class="bar-fill fill-e"></div></div>
+                        <span id="valE" class="e-val">0.0</span>
+                    </div>
+                </div>
+
+                <div class="realtime-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">高さ h</span>
+                        <span class="stat-value" id="dispH">0.0</span> <span class="unit">m</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">速さ v</span>
+                        <span class="stat-value" id="dispV">0.0</span> <span class="unit">m/s</span>
+                    </div>
+                </div>
+                <p style="font-size:0.75rem; color:#888; text-align:center; margin-top:5px;">
+                    ※ 力学的エネルギーEを基準(100%)として表示
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            if(el) { el.style.display = 'block'; el.innerText = msg; }
+            console.error(msg);
+        }
+
+        try {
+            function toSigFigs(num) {
+                if (typeof num !== 'number' || isNaN(num)) return "0.0";
+                if (Math.abs(num) < 0.001) return "0.0"; 
+                return num.toPrecision(2);
+            }
+
+            const g = 9.8;
+            const simCanvas = document.getElementById('simCanvas');
+            if (!simCanvas) throw new Error("Canvas missing");
+            const simCtx = simCanvas.getContext('2d');
+            
+            simCanvas.width = 400;
+            simCanvas.height = 400;
+            
+            const originX = 200; 
+            const originY = 50;
+            const pxScale = 150; 
+
+            // 状態変数
+            let simMass = 1.0;
+            let simLen = 1.0; 
+            let simTheta = 0; 
+            let simOmega = 0;
+            let savedTotalEnergy = 0; 
+            let isRunning = false;
+            let useResistance = false;
+            let isDragging = false;
+            
+            const SUB_STEPS = 10; 
+            const dt = 0.016; 
+            const subDt = dt / SUB_STEPS;
+            let dampingFactor = 0.999; 
+
+            const els = {
+                massRange: document.getElementById('massRange'),
+                lengthRange: document.getElementById('lengthRange'),
+                massVal: document.getElementById('massVal'),
+                lengthVal: document.getElementById('lengthVal'),
+                pauseBtn: document.getElementById('pauseBtn'),
+                resetBtn: document.getElementById('resetBtn'),
+                resistanceBtn: document.getElementById('resistanceBtn'),
+                resistanceControl: document.getElementById('resistanceControl'),
+                resRange: document.getElementById('resRange'),
+                resVal: document.getElementById('resVal'),
+                dragHint: document.getElementById('dragHint'),
+                dispH: document.getElementById('dispH'),
+                dispV: document.getElementById('dispV'),
+                barK: document.getElementById('barK'),
+                barU: document.getElementById('barU'),
+                barE: document.getElementById('barE'),
+                valK: document.getElementById('valK'),
+                valU: document.getElementById('valU'),
+                valE: document.getElementById('valE')
+            };
+
+            for (let k in els) { if (!els[k]) throw new Error("Element missing: " + k); }
+
+            els.massVal.innerText = toSigFigs(simMass);
+            els.lengthVal.innerText = toSigFigs(simLen);
+
+            function calculateCurrentEnergy() {
+                if (isNaN(simTheta)) simTheta = 0;
+                if (isNaN(simLen) || simLen <= 0) simLen = 1.0;
+
+                const h = simLen * (1 - Math.cos(simTheta));
+                const v = simLen * simOmega;
+                
+                const K = 0.5 * simMass * v * v;
+                const U = simMass * g * h;
+                return { K, U, Total: K + U };
+            }
+
+            function updateParams() {
+                simMass = parseFloat(els.massRange.value); 
+                simLen = parseFloat(els.lengthRange.value);
+                els.massVal.innerText = toSigFigs(simMass); 
+                els.lengthVal.innerText = toSigFigs(simLen);
+                
+                const e = calculateCurrentEnergy();
+                savedTotalEnergy = e.Total;
+                
+                drawSim();
+                updateStats();
+            }
+
+            els.massRange.oninput = updateParams;
+            els.lengthRange.oninput = updateParams;
+
+            function updateResistanceCoef() {
+                const val = parseInt(els.resRange.value);
+                const strength = val * 0.00005; 
+                dampingFactor = 1.0 - strength;
+                if(val < 15) els.resVal.innerText = "小";
+                else if(val < 35) els.resVal.innerText = "中";
+                else els.resVal.innerText = "大";
+            }
+            els.resRange.oninput = updateResistanceCoef;
+
+            els.resistanceBtn.onclick = () => {
+                useResistance = !useResistance;
+                els.resistanceBtn.innerText = `空気抵抗: ${useResistance ? 'ON' : 'OFF'}`;
+                els.resistanceBtn.classList.toggle('active', useResistance);
+                
+                if (useResistance) {
+                    els.resistanceControl.classList.remove('disabled-control');
+                    updateResistanceCoef();
+                } else {
+                    els.resistanceControl.classList.add('disabled-control');
+                    const e = calculateCurrentEnergy();
+                    savedTotalEnergy = e.Total;
+                }
+            };
+
+            els.pauseBtn.onclick = () => {
+                if (Math.abs(simTheta) < 0.0001 && Math.abs(simOmega) < 0.0001 && !isRunning) return; 
+                isRunning = !isRunning;
+                els.pauseBtn.innerText = isRunning ? "一時停止" : "再開";
+                if (isRunning && !useResistance) {
+                    const e = calculateCurrentEnergy();
+                    savedTotalEnergy = e.Total;
+                }
+                updateHint();
+            };
+            
+            els.resetBtn.onclick = () => {
+                simTheta = 0; simOmega = 0;
+                isRunning = false; 
+                savedTotalEnergy = 0; 
+                els.pauseBtn.innerText = "一時停止";
+                drawSim();
+                updateStats(); 
+                updateHint(); 
+            };
+
+            function updateHint() {
+                const isStill = !isRunning && Math.abs(simTheta) < 0.01 && Math.abs(simOmega) < 0.01 && !isDragging;
+                if (isStill) {
+                    els.dragHint.style.display = "block";
+                    els.pauseBtn.disabled = true; 
+                } else {
+                    els.dragHint.style.display = "none";
+                    els.pauseBtn.disabled = false;
+                }
+            }
+
+            function getMousePos(evt) {
+                const rect = simCanvas.getBoundingClientRect();
+                const clientX = evt.clientX || (evt.touches ? evt.touches[0].clientX : 0);
+                const clientY = evt.clientY || (evt.touches ? evt.touches[0].clientY : 0);
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            }
+
+            function handleDragStart(e) {
+                e.preventDefault(); 
+                const pos = getMousePos(e);
+                const bobX = originX + simLen * pxScale * Math.sin(simTheta);
+                const bobY = originY + simLen * pxScale * Math.cos(simTheta);
+                
+                const dist = Math.sqrt((pos.x - bobX)**2 + (pos.y - bobY)**2);
+                if (dist < 60) { 
+                    isDragging = true; isRunning = false; updateHint();
+                    drawSim(); // 色更新のため再描画
+                }
+            }
+
+            function handleDragMove(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                const pos = getMousePos(e);
+                const dx = pos.x - originX;
+                const dy = pos.y - originY;
+                let newTheta = Math.atan2(dx, dy);
+                
+                const limit = 85 * Math.PI / 180;
+                if (newTheta > limit) newTheta = limit;
+                if (newTheta < -limit) newTheta = -limit;
+                
+                simTheta = newTheta; simOmega = 0; 
+                
+                const eCalc = calculateCurrentEnergy();
+                savedTotalEnergy = eCalc.Total;
+
+                drawSim(); 
+                updateStats(); 
+            }
+
+            function handleDragEnd(e) {
+                if (isDragging) {
+                    isDragging = false; isRunning = true; 
+                    els.pauseBtn.innerText = "一時停止";
+                    const eCalc = calculateCurrentEnergy();
+                    savedTotalEnergy = eCalc.Total;
+                    updateHint();
+                    drawSim(); // 色更新のため再描画
+                }
+            }
+
+            simCanvas.addEventListener('mousedown', handleDragStart);
+            simCanvas.addEventListener('mousemove', handleDragMove);
+            simCanvas.addEventListener('mouseup', handleDragEnd);
+            simCanvas.addEventListener('mouseleave', handleDragEnd);
+            simCanvas.addEventListener('touchstart', handleDragStart, {passive: false});
+            simCanvas.addEventListener('touchmove', handleDragMove, {passive: false});
+            simCanvas.addEventListener('touchend', handleDragEnd);
+
+            function loop() {
+                if (isRunning && !isDragging) {
+                    for (let i = 0; i < SUB_STEPS; i++) {
+                        const alpha = -(g / simLen) * Math.sin(simTheta);
+                        let omegaNext = simOmega + alpha * subDt;
+                        
+                        if (useResistance) {
+                            omegaNext *= dampingFactor;
+                            simTheta += omegaNext * subDt;
+                            simOmega = omegaNext;
+                        } else {
+                            let thetaNext = simTheta + omegaNext * subDt;
+                            const h_new = simLen * (1 - Math.cos(thetaNext));
+                            const U_new = simMass * g * h_new;
+                            let K_req = savedTotalEnergy - U_new;
+
+                            if (K_req < 0) {
+                                simOmega = 0;
+                            } else {
+                                const v_req = Math.sqrt((2 * K_req) / simMass);
+                                const omega_mag = v_req / simLen;
+                                const sign = Math.sign(omegaNext); 
+                                simOmega = (Math.abs(omegaNext) < 0.0001 && sign === 0) ? omegaNext : sign * omega_mag;
+                                simTheta = thetaNext;
+                            }
+                        }
+                    }
+                    drawSim();
+                    updateStats();
+                }
+                requestAnimationFrame(loop);
+            }
+
+            function drawSim() {
+                simCtx.clearRect(0, 0, simCanvas.width, simCanvas.height);
+                
+                if (isNaN(simTheta)) simTheta = 0;
+                if (isNaN(simLen)) simLen = 1.0;
+
+                const bobX = originX + simLen * pxScale * Math.sin(simTheta);
+                const bobY = originY + simLen * pxScale * Math.cos(simTheta);
+                const lowestY = originY + simLen * pxScale;
+
+                // 基準線
+                simCtx.beginPath();
+                simCtx.setLineDash([5, 5]);
+                simCtx.strokeStyle = '#ccc';
+                simCtx.lineWidth = 1;
+                simCtx.moveTo(0, lowestY);
+                simCtx.lineTo(simCanvas.width, lowestY);
+                simCtx.stroke();
+                
+                simCtx.setLineDash([]);
+                simCtx.font = "12px sans-serif";
+                simCtx.fillStyle = '#999';
+                simCtx.fillText("基準面", 10, lowestY - 5);
+
+                // 高さガイド
+                if (savedTotalEnergy > 0.001) {
+                    const h_max = savedTotalEnergy / (simMass * g);
+                    const lineY = lowestY - h_max * pxScale;
+                    simCtx.beginPath();
+                    simCtx.setLineDash([4, 4]); 
+                    simCtx.strokeStyle = 'rgba(78, 205, 196, 0.8)'; 
+                    simCtx.lineWidth = 1.5;
+                    simCtx.moveTo(0, lineY);
+                    simCtx.lineTo(simCanvas.width, lineY);
+                    simCtx.stroke();
+                    
+                    simCtx.setLineDash([]);
+                    simCtx.fillStyle = 'rgba(78, 205, 196, 1)';
+                    simCtx.fillText("最高点", 10, lineY - 5);
+                }
+
+                // 糸
+                simCtx.beginPath();
+                simCtx.moveTo(originX, originY);
+                simCtx.lineTo(bobX, bobY);
+                simCtx.strokeStyle = '#333';
+                simCtx.lineWidth = 2;
+                simCtx.stroke();
+
+                // ★おもりの描画ロジック変更
+                simCtx.beginPath();
+                
+                // 1. サイズ固定（以前より小さく）
+                const fixedRadius = 10; 
+                simCtx.arc(bobX, bobY, fixedRadius, 0, Math.PI * 2);
+
+                // 2. 質量に応じたグレースケール計算
+                // 最小(0.1) -> 255(白), 最大(5.0) -> 30(濃いグレー)
+                // 軽いほど白く、重いほど黒く
+                const minM = 0.1; 
+                const maxM = 5.0;
+                const ratio = (simMass - minM) / (maxM - minM);
+                const grayVal = Math.floor(255 - (ratio * 225)); // 255 -> 30
+                
+                simCtx.fillStyle = `rgb(${grayVal}, ${grayVal}, ${grayVal})`;
+                simCtx.fill();
+
+                // 3. 枠線（ドラッグ中は水色で太く、通常は黒で細く）
+                if (isDragging) {
+                    simCtx.lineWidth = 3;
+                    simCtx.strokeStyle = '#4ecdc4'; // ドラッグ時の強調色
+                } else {
+                    simCtx.lineWidth = 1.5;
+                    simCtx.strokeStyle = '#333'; // 通常時の枠線
+                }
+                simCtx.stroke();
+                
+                // 支点
+                simCtx.beginPath();
+                simCtx.arc(originX, originY, 4, 0, Math.PI*2);
+                simCtx.fillStyle = '#333';
+                simCtx.fill();
+            }
+
+            function updateStats() {
+                if (isNaN(simTheta) || isNaN(simLen) || isNaN(simOmega)) return;
+
+                const h = simLen * (1 - Math.cos(simTheta));
+                const v = Math.abs(simLen * simOmega);
+                const e = calculateCurrentEnergy();
+
+                els.dispH.innerText = toSigFigs(h);
+                els.dispV.innerText = toSigFigs(v);
+                
+                const displayK = e.K < 0.01 ? 0.0 : e.K;
+                const displayU = e.U < 0.01 ? 0.0 : e.U;
+                const displayE = e.Total < 0.01 ? 0.0 : e.Total;
+
+                els.valK.innerText = toSigFigs(displayK);
+                els.valU.innerText = toSigFigs(displayU);
+                els.valE.innerText = toSigFigs(displayE);
+
+                let denominator = savedTotalEnergy; 
+                if (denominator < 0.0001) denominator = 1.0; 
+                if (useResistance) {
+                    denominator = savedTotalEnergy > 0.0001 ? savedTotalEnergy : 1.0;
+                }
+
+                els.barK.style.width = Math.min((e.K / denominator) * 100, 100) + "%";
+                els.barU.style.width = Math.min((e.U / denominator) * 100, 100) + "%";
+                els.barE.style.width = Math.min((e.Total / denominator) * 100, 100) + "%";
+            }
+
+            updateResistanceCoef();
+            const initialE = calculateCurrentEnergy();
+            savedTotalEnergy = initialE.Total;
+            
+            drawSim();
+            updateStats();
+            updateHint();
+            
+            requestAnimationFrame(loop);
+
+        } catch (err) {
+            showError(err.message);
+        }
+    })();
+    </script>
+</body>
+</html>
