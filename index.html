@@ -29,29 +29,67 @@
         }
 
         .canvas-area { 
-            width: 420px; 
+            width: 100%; 
+            max-width: 420px; 
             display: flex; 
             justify-content: center; 
             align-items: center;
             overflow: hidden;
         }
+        
+        canvas {
+            max-width: 100%;
+            height: auto;
+            touch-action: none; /* スマホでのドラッグ中に画面がスクロールするのを防ぐ */
+        }
+
         .sim-area { cursor: grab; }
         .sim-area:active { cursor: grabbing; }
 
         .controls-area { 
             flex: 1; 
-            min-width: 340px; 
+            min-width: 300px; /* 小さな画面でもはみ出さないように少し縮小 */
             padding: 20px; 
             display: flex; 
             flex-direction: column; 
             justify-content: space-between; 
         }
         
-        .buttons-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-        button { flex: 1; background: #333; color: #fff; border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-size: 1rem; transition: background 0.2s;}
-        button:hover { background: #555; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        button.active { background: #4ecdc4; font-weight: bold; color: #fff; }
+        .buttons-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        
+        /* 物理ボタンの視認性向上（位置固定） */
+        button { 
+            flex: 1; border: none; padding: 14px 5px; border-radius: 8px; cursor: pointer; 
+            font-size: 1rem; font-weight: bold; transition: all 0.1s ease;
+            margin-bottom: 5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.3);
+            position: relative;
+        }
+        button:active:not(:disabled) { 
+            /* 位置は動かさず、内側の影と暗転で押し込みを表現 */
+            box-shadow: inset 0 4px 8px rgba(0,0,0,0.3) !important; 
+            filter: brightness(0.9);
+        }
+        button:disabled { 
+            background: #d3d3d3 !important; color: #888 !important; 
+            box-shadow: none !important; cursor: not-allowed; 
+        }
+        
+        .btn-primary { background: linear-gradient(to bottom, #4dabf7, #228be6); color: white; }
+        .btn-primary:hover:not(:disabled) { background: linear-gradient(to bottom, #339af0, #1c7ed6); }
+
+        .btn-secondary { background: linear-gradient(to bottom, #69db7c, #40c057); color: white; }
+        .btn-secondary:hover:not(:disabled) { background: linear-gradient(to bottom, #51cf66, #37b24d); }
+        .btn-secondary.active { 
+            background: #2b8a3e !important; box-shadow: inset 0 4px 8px rgba(0,0,0,0.4) !important;
+        }
+
+        .btn-danger { background: linear-gradient(to bottom, #ff8787, #fa5252); color: white; }
+        .btn-danger:hover:not(:disabled) { background: linear-gradient(to bottom, #ff6b6b, #f03e3e); }
+
+        #resistanceBtn { background: linear-gradient(to bottom, #ced4da, #adb5bd); color: #333; width: 100%; margin-bottom: 10px; }
+        #resistanceBtn:hover:not(:disabled) { background: linear-gradient(to bottom, #adb5bd, #868e96); color: white; }
+        #resistanceBtn.active { background: #4ecdc4 !important; color: white; box-shadow: inset 0 4px 8px rgba(0,0,0,0.3) !important; }
 
         .control-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem;}
         input[type=range] { width: 100%; cursor: pointer; margin-bottom: 0;}
@@ -96,8 +134,8 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
     </style>
-    <meta property="og:description" content="振り子を振った時の、おもりがもつ運動エネルギーと位置エネルギーの変化をシミュレーションします">
     <meta property="og:image" content="https://kaneshigenobutsuri.github.io/Conservation-of-mechanical-energy-of-a-pendulum/ogp-image.png">
+<meta property="og:description" content="ブラウザで動かして学べる物理シミュレーション。おもりを引っ張って離すだけ！運動エネルギーと位置エネルギーの移り変わりをリアルタイムのグラフで視覚的に理解しよう。空気抵抗やスロー再生も試せます。">
 </head>
 <body>
 
@@ -113,12 +151,13 @@
         <div class="controls-area box-style">
             <div>
                 <div class="buttons-row">
-                    <button id="pauseBtn">一時停止</button>
-                    <button id="resetBtn">リセット</button>
+                    <button id="pauseBtn" class="btn-primary">一時停止</button>
+                    <button id="slowBtn" class="btn-secondary">スロー: OFF</button>
+                    <button id="resetBtn" class="btn-danger">リセット</button>
                 </div>
                 
                 <div style="background: #f0f0f0; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
-                    <button id="resistanceBtn" style="width:100%; margin-bottom:5px;">空気抵抗: OFF</button>
+                    <button id="resistanceBtn">空気抵抗: OFF</button>
                     <div id="resistanceControl" class="sub-control disabled-control">
                         <label>抵抗の大きさ: <span id="resVal">小</span></label>
                         <input type="range" id="resRange" min="1" max="50" step="1" value="10">
@@ -140,17 +179,17 @@
                     <div class="energy-row">
                         <span class="e-label">運動 K</span>
                         <div class="bar-track"><div id="barK" class="bar-fill fill-k"></div></div>
-                        <span id="valK" class="e-val">0.0</span>
+                        <span id="valK" class="e-val">0.0</span><span class="unit" style="margin-left:4px; width:12px;">J</span>
                     </div>
                     <div class="energy-row">
                         <span class="e-label">位置 U</span>
                         <div class="bar-track"><div id="barU" class="bar-fill fill-u"></div></div>
-                        <span id="valU" class="e-val">0.0</span>
+                        <span id="valU" class="e-val">0.0</span><span class="unit" style="margin-left:4px; width:12px;">J</span>
                     </div>
                     <div class="energy-row">
                         <span class="e-label">力学的 E</span>
                         <div class="bar-track"><div id="barE" class="bar-fill fill-e"></div></div>
-                        <span id="valE" class="e-val">0.0</span>
+                        <span id="valE" class="e-val">0.0</span><span class="unit" style="margin-left:4px; width:12px;">J</span>
                     </div>
                 </div>
 
@@ -164,9 +203,6 @@
                         <span class="stat-value" id="dispV">0.0</span> <span class="unit">m/s</span>
                     </div>
                 </div>
-                <p style="font-size:0.75rem; color:#888; text-align:center; margin-top:5px;">
-                    ※ 力学的エネルギーEを基準(100%)として表示
-                </p>
             </div>
         </div>
     </div>
@@ -207,6 +243,7 @@
             let isRunning = false;
             let useResistance = false;
             let isDragging = false;
+            let isSlowMotion = false; // スローモーション状態
             
             const SUB_STEPS = 10; 
             const dt = 0.016; 
@@ -219,6 +256,7 @@
                 massVal: document.getElementById('massVal'),
                 lengthVal: document.getElementById('lengthVal'),
                 pauseBtn: document.getElementById('pauseBtn'),
+                slowBtn: document.getElementById('slowBtn'),
                 resetBtn: document.getElementById('resetBtn'),
                 resistanceBtn: document.getElementById('resistanceBtn'),
                 resistanceControl: document.getElementById('resistanceControl'),
@@ -304,6 +342,12 @@
                 updateHint();
             };
             
+            els.slowBtn.onclick = () => {
+                isSlowMotion = !isSlowMotion;
+                els.slowBtn.innerText = `スロー: ${isSlowMotion ? 'ON' : 'OFF'}`;
+                els.slowBtn.classList.toggle('active', isSlowMotion);
+            };
+
             els.resetBtn.onclick = () => {
                 simTheta = 0; simOmega = 0;
                 isRunning = false; 
@@ -327,9 +371,17 @@
 
             function getMousePos(evt) {
                 const rect = simCanvas.getBoundingClientRect();
-                const clientX = evt.clientX || (evt.touches ? evt.touches[0].clientX : 0);
-                const clientY = evt.clientY || (evt.touches ? evt.touches[0].clientY : 0);
-                return { x: clientX - rect.left, y: clientY - rect.top };
+                const clientX = evt.clientX || (evt.touches && evt.touches.length > 0 ? evt.touches[0].clientX : 0);
+                const clientY = evt.clientY || (evt.touches && evt.touches.length > 0 ? evt.touches[0].clientY : 0);
+                
+                // 画面サイズに合わせてCanvasが縮小表示されている場合でも、正確なタッチ座標を取得する
+                const scaleX = simCanvas.width / rect.width;
+                const scaleY = simCanvas.height / rect.height;
+                
+                return { 
+                    x: (clientX - rect.left) * scaleX, 
+                    y: (clientY - rect.top) * scaleY 
+                };
             }
 
             function handleDragStart(e) {
@@ -387,27 +439,42 @@
 
             function loop() {
                 if (isRunning && !isDragging) {
+                    // スローモーション時の時間スケール設定
+                    const timeScale = isSlowMotion ? 0.2 : 1.0;
+                    const currentSubDt = subDt * timeScale;
+                    
+                    // 空気抵抗の減衰係数（時間スケールを考慮して調整）
+                    const resValForDamping = parseInt(els.resRange.value);
+                    const baseStrength = resValForDamping * 0.00005;
+                    const currentDampingFactor = 1.0 - (baseStrength * timeScale);
+
                     for (let i = 0; i < SUB_STEPS; i++) {
                         const alpha = -(g / simLen) * Math.sin(simTheta);
-                        let omegaNext = simOmega + alpha * subDt;
                         
                         if (useResistance) {
-                            omegaNext *= dampingFactor;
-                            simTheta += omegaNext * subDt;
+                            let omegaNext = simOmega + alpha * currentSubDt;
+                            omegaNext *= currentDampingFactor;
+                            simTheta += omegaNext * currentSubDt;
                             simOmega = omegaNext;
                         } else {
-                            let thetaNext = simTheta + omegaNext * subDt;
+                            // シンプレクティック・オイラー法で自然な運動を計算
+                            let omegaNext = simOmega + alpha * currentSubDt;
+                            let thetaNext = simTheta + omegaNext * currentSubDt;
+                            
                             const h_new = simLen * (1 - Math.cos(thetaNext));
                             const U_new = simMass * g * h_new;
-                            let K_req = savedTotalEnergy - U_new;
+                            const K_req = savedTotalEnergy - U_new;
 
-                            if (K_req < 0) {
-                                simOmega = 0;
+                            if (K_req <= 0) {
+                                // 最高点付近：エネルギー補正を一旦やめ、物理演算の自然な振る舞いを優先する（スタック防止）
+                                simTheta = thetaNext;
+                                simOmega = omegaNext;
                             } else {
+                                // 通常時：必要な運動エネルギーから速度を計算し、厳密なエネルギー保存を適用する
                                 const v_req = Math.sqrt((2 * K_req) / simMass);
-                                const omega_mag = v_req / simLen;
-                                const sign = Math.sign(omegaNext); 
-                                simOmega = (Math.abs(omegaNext) < 0.0001 && sign === 0) ? omegaNext : sign * omega_mag;
+                                // omegaNextが0の場合は直前のsimOmegaの符号を使う
+                                const sign = omegaNext !== 0 ? Math.sign(omegaNext) : Math.sign(simOmega);
+                                simOmega = sign * (v_req / simLen);
                                 simTheta = thetaNext;
                             }
                         }
@@ -421,6 +488,14 @@
             function drawSim() {
                 simCtx.clearRect(0, 0, simCanvas.width, simCanvas.height);
                 
+                // 空気抵抗ON時の青みオーバーレイ
+                if (useResistance) {
+                    const val = parseInt(els.resRange.value);
+                    const alpha = (val / 50) * 0.4; // 抵抗に応じて0.008〜0.4の透明度
+                    simCtx.fillStyle = `rgba(100, 180, 255, ${alpha})`;
+                    simCtx.fillRect(0, 0, simCanvas.width, simCanvas.height);
+                }
+
                 if (isNaN(simTheta)) simTheta = 0;
                 if (isNaN(simLen)) simLen = 1.0;
 
@@ -512,9 +587,25 @@
                 els.dispH.innerText = toSigFigs(h);
                 els.dispV.innerText = toSigFigs(v);
                 
-                const displayK = e.K < 0.01 ? 0.0 : e.K;
-                const displayU = e.U < 0.01 ? 0.0 : e.U;
-                const displayE = e.Total < 0.01 ? 0.0 : e.Total;
+                let displayK = e.K;
+                let displayU = e.U;
+                let displayE = e.Total;
+
+                // 空気抵抗OFF時は、表示上の合計エネルギーを保存エネルギーに固定して数値を安定させる
+                if (!useResistance && savedTotalEnergy > 0) {
+                    displayE = savedTotalEnergy;
+                    if (e.U > savedTotalEnergy) {
+                        displayU = savedTotalEnergy;
+                        displayK = 0.0;
+                    } else {
+                        displayU = e.U;
+                        displayK = savedTotalEnergy - e.U;
+                    }
+                }
+
+                displayK = displayK < 0.01 ? 0.0 : displayK;
+                displayU = displayU < 0.01 ? 0.0 : displayU;
+                displayE = displayE < 0.01 ? 0.0 : displayE;
 
                 els.valK.innerText = toSigFigs(displayK);
                 els.valU.innerText = toSigFigs(displayU);
